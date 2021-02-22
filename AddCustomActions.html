@@ -1,0 +1,227 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <script type="text/javascript" src="https://office1.bt.com/sites/TNG_OE_PMO/PODEV/SiteAssets/Common/jquery-3.2.0.min.js"></script>
+	<script src="/_layouts/sp.core.js" type="text/javascript"></script>
+	<script src="/_layouts/sp.runtime.js" type="text/javascript"></script>
+	<script src="/_layouts/sp.js" type="text/javascript"></script>
+	<script type="text/javascript" src="/_layouts/15/ScriptResx.ashx?name=sp.res&culture=en-us"></script>
+	<script type="text/javascript" src="/_layouts/15/sp.init.js"></script>
+
+    <script>
+
+        var customActionArray = [];
+        var waitDialog = null;
+
+        $(document).ready(initializeLoading);
+
+        function initializeLoading() {
+            SP.SOD.executeOrDelayUntilScriptLoaded(getUserCustomAction, 'sp.js');
+        }
+
+        function getUserCustomAction() {
+            //ShowWaitDialog();
+            this.clientContext = new SP.ClientContext();
+            var oWebsite = clientContext.get_web();
+            this.collUserCustomAction = oWebsite.get_userCustomActions();
+            clientContext.load(oWebsite, 'UserCustomActions', 'Title');
+            clientContext.executeQueryAsync(Function.createDelegate(this, this.getCustomActions), Function.createDelegate(this, this.onQueryFailed));
+        }
+
+        function getCustomActions() {
+            var strTableContent = '<table class="customActionView" cellpadding="0" cellspacing="0">' +
+                '<thead><tr><th>Sequence</th><th>Title</th><th>Delete</th></tr></thead><tbody>';
+            var customActionEnumerator = collUserCustomAction.getEnumerator();
+            while (customActionEnumerator.moveNext()) {
+                var oUserCustomAction = customActionEnumerator.get_current();
+                var actiontitle = String(oUserCustomAction.get_title()).trim();
+                var sequence = oUserCustomAction.get_sequence();
+                var deleteLink = sequence !== 10001 ? '<a abbr="' + actiontitle + '" href="#" onclick="confirmDeleteCustomAction(this)">Delete</a>' : '';
+                customActionArray.push({ object: oUserCustomAction, id: oUserCustomAction.get_id(), title: actiontitle, sequence: sequence });
+                strTableContent += '<tr><td>' + sequence + '</td><td>' + actiontitle + '</td><td>' + deleteLink + '</td></tr>';
+            }
+            if (customActionArray.length > 0) {
+                $('#divListCustomActions').html(strTableContent + '</tbody></table>');
+            }
+            else {
+                $('#divListCustomActions').html(strTableContent + '<tr><td colspan="3">No CustomAction found...</td></tr></tbody></table>');
+            }
+            HideWaitDialog();
+        }
+
+        function confirmDeleteCustomAction(ele) {
+            //alert($(ele).attr('abbr'));
+            var confirmMsg = "Do you realy want to delete the CustomAction : " + $(ele).attr('abbr');
+            if (confirm(confirmMsg) == true) {
+                deleteUserCustomAction($(ele).attr('abbr'));
+                //alert($(ele).attr('abbr'));
+                //return false;
+            } else {
+                return false;
+            }
+        }
+
+        function deleteUserCustomAction(actionTitle) {
+            //ShowWaitDialog();
+            this.clientContext = new SP.ClientContext();
+            var oWebsite = clientContext.get_web();
+            this.collDelCustomAction = oWebsite.get_userCustomActions();
+            clientContext.load(oWebsite, 'UserCustomActions', 'Title');
+            clientContext.load(collDelCustomAction);
+            clientContext.executeQueryAsync(function () { deleteCustomAction(actionTitle); }, onQueryFailed);
+        }
+
+        function deleteCustomAction(actionTitle) {
+            var customActionEnumerator = collDelCustomAction.getEnumerator();
+            while (customActionEnumerator.moveNext()) {
+                var oUserCustomAction = customActionEnumerator.get_current();
+                if (String(oUserCustomAction.get_title()) == actionTitle) {
+                    oUserCustomAction.deleteObject();
+                    clientContext.load(oUserCustomAction);
+                    clientContext.executeQueryAsync(Function.createDelegate(this, this.onDeleteSucceeded), Function.createDelegate(this, this.onQueryFailed));
+                }
+            }
+        }
+
+        function onDeleteSucceeded() {
+            HideWaitDialog();
+            alert('Custom action removed');
+            getUserCustomAction();
+        }
+
+        function AddCustomActions() {
+            try {
+                //ShowWaitDialog();
+                var actionTitle = $('#txtTitle').val().trim();
+                var actionSequence = $('#txtSequence').val().trim();
+                var scriptSrc = $('#txtLinkSrc').val().trim();
+                if (actionTitle != '' && actionSequence != '' && scriptSrc != '') {
+                    var customActionFiltered = $.grep(customActionArray, function (el, i) {
+                        return (el.title.toLowerCase() == actionTitle.toLowerCase() || el.sequence == actionSequence)
+                    });
+                    if (customActionFiltered.length <= 0) {
+                        var clientContext = new SP.ClientContext();
+                        var site = clientContext.get_web();
+                        var UserCustomActions = site.get_userCustomActions();
+
+                        newUserCustomAction = UserCustomActions.add();
+                        newUserCustomAction.set_location('ScriptLink');
+                        newUserCustomAction.set_scriptSrc(scriptSrc);
+                        newUserCustomAction.set_sequence(actionSequence);
+                        newUserCustomAction.set_title(actionTitle);
+                        newUserCustomAction.set_description($('#txtDescription').val());
+                        newUserCustomAction.update();
+
+                        clientContext.executeQueryAsync(Function.createDelegate(this, this.onQuerySucceeded), Function.createDelegate(this, this.onQueryFailed));
+
+                    }
+                    else {
+                        HideWaitDialog();
+                        alert('Custom Action already exists with same Title or Sequence');
+                        return false;
+                    }
+                }
+                else {
+                    HideWaitDialog();
+                    alert('Please enter all manadatory fields');
+                    return false;
+                }
+            }
+            catch (ex) {
+                HideWaitDialog();
+                alert('Error: ' + ex);
+            }
+        }
+
+        function onQuerySucceeded(sender, args) {
+            HideWaitDialog();
+            alert('New Support files added to Site, please wait page will refresh now...');
+            location.reload();
+        }
+
+        function onQueryFailed(sender, args) {
+            HideWaitDialog();
+            alert('Request failed. ' + args.get_message() + '\n' + args.get_stackTrace());
+        }
+
+        /**************************************************************************/
+        /// Function name: ShowWaitDialog
+        /// Summary:  To show OOB SP wait dialog
+        /**************************************************************************/
+        function ShowWaitDialog(title, message) {
+            if (waitDialog == null) {
+                waitDialog = (typeof (title) !== "undefined" && title !== '') ? SP.UI.ModalDialog.showWaitScreenWithNoClose(title, message) :
+                    SP.UI.ModalDialog.showWaitScreenWithNoClose(SP.Res.dialogLoading15);
+            }
+        };
+
+        /**************************************************************************/
+        /// Function name: HideWaitDialog
+        /// Summary:  To hide OOB SP wait dialog
+        /**************************************************************************/
+        function HideWaitDialog() {
+            if (waitDialog !== null) {
+                waitDialog.close();
+                waitDialog = null;
+            }
+        };
+
+    </script>
+
+<!--[if gte mso 9]><xml>
+<mso:CustomDocumentProperties>
+<mso:Document_x0020_LanguageTaxHTField0 msdt:dt="string">English|6b8bacaf-8426-4946-be39-8600aacd45b4</mso:Document_x0020_LanguageTaxHTField0>
+<mso:TaxCatchAll msdt:dt="string">1;#English</mso:TaxCatchAll>
+</mso:CustomDocumentProperties>
+</xml><![endif]-->
+</head>
+<body>
+
+    <div id="divListCustomActions"></div>
+    <br /><br />
+
+    <table class="customActionTable" cellpadding="0" cellspacing="0">
+        <thead>
+            <tr>
+                <th colspan="4">Create User Custom Action</th>
+            </tr>
+        </thead>
+        <tr>
+            <td></td>
+            <td>Title *</td>
+            <td><input id="txtTitle" type="text" /></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>Description</td>
+            <td>
+                <textarea id="txtDescription" rows="4" cols="50"></textarea>
+            </td>
+            <td></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>Script Source *</td>
+            <td><input id="txtLinkSrc" type="text" /> like "~SiteCollection/SiteAssets/alert.js"</td>
+            <td></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>Sequemce No. *</td>
+            <td><input id="txtSequence" type="text" /></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td></td>
+            <td><input type="button" value="Create New CustomAction" onclick="AddCustomActions();" /></td>
+            <td></td>
+        </tr>
+    </table>
+</body>
+</html>
