@@ -1,0 +1,11 @@
+#s4-titlerow, #sideNavBox{
+    display: none !important;
+}
+#contentBox {
+    margin-right: 0px !important;
+    margin-left: 0px !important;
+    min-width: 703px;
+}
+#contentRow .ms-wikicontent{
+    padding: 0 !important;
+}
